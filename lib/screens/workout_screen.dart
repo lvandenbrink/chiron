@@ -535,9 +535,6 @@ class _TimedRepsLayout extends StatelessWidget {
     if (exercise.type == ExerciseType.reps) {
       return _BpmBadge(bpm: exercise.repBpm);
     }
-    if (exercise.type == ExerciseType.timed && provider.metronomeBpm != null) {
-      return _BpmBadge(bpm: provider.metronomeBpm!);
-    }
     return Text(
       pressHeld ? 'Laat los om verder te gaan' : 'Houd ingedrukt om te pauzeren',
       style: Theme.of(context)

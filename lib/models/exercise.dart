@@ -26,8 +26,6 @@ class Exercise {
   final int? phase;
   final int? prepDurationSeconds;
   final int? restAfterExerciseSeconds;
-  final int? metronomeBpmMin;
-  final int? metronomeBpmMax;
 
   const Exercise({
     required this.id,
@@ -46,8 +44,6 @@ class Exercise {
     this.prepDurationSeconds,
     this.restAfterExerciseSeconds,
     this.phase,
-    this.metronomeBpmMin,
-    this.metronomeBpmMax,
   });
 
   Exercise copyWith({int? repBpm, int? reps}) => Exercise(
@@ -67,8 +63,6 @@ class Exercise {
         prepDurationSeconds: prepDurationSeconds,
         restAfterExerciseSeconds: restAfterExerciseSeconds,
         phase: phase,
-        metronomeBpmMin: metronomeBpmMin,
-        metronomeBpmMax: metronomeBpmMax,
       );
 
   String get setsRepsLabel {

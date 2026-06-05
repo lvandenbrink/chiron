@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/widgets.dart';
 import '../models/exercise.dart';
 import '../models/program.dart';
@@ -27,9 +26,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Timer? _countdownTimer;
   Timer? _repCueTimer;
-  Timer? _metronomeTimer;
-  int? _activeBpm;
-  final Random _random = Random();
   bool _isDisposed = false;
 
   void Function(Exercise)? _onExerciseCompleted;
@@ -41,7 +37,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const int firstPrepDurationSeconds = 10;
   static const int shortPrepDurationSeconds = 3;
   static const int switchSidesDurationSeconds = 3;
-  static const int postLastRepDelaySeconds = 3;
 
   WorkoutProvider({AudioService? audioService})
       : _audioService = audioService ?? AudioService() {
@@ -67,7 +62,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get isRestAfterExercise => _phase == WorkoutPhase.rest && _currentSetIndex == 0;
   int get remainingSeconds => _remainingSeconds;
   int get prepSeconds => _prepSeconds;
-  int? get metronomeBpm => _activeBpm;
 
   Exercise? get nextExercise =>
       _currentExerciseIndex + 1 < _exercises.length
@@ -154,7 +148,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
         final exercise = currentExercise;
         if (exercise?.type == ExerciseType.timed) {
           _startCountdown();
-          _startMetronome(exercise!, resume: true);
         } else if (exercise != null && exercise.type == ExerciseType.reps) {
           if (_currentRepIndex >= (exercise.reps ?? 0)) {
             _onSetDone();
@@ -211,7 +204,9 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void skipSideSwitch() {
     _cancelTimers();
+    _initExerciseTimerValues();
     _phase = WorkoutPhase.exercise;
+    _audioService.playExerciseStart();
     _startExerciseTimer();
     notifyListeners();
   }
@@ -263,7 +258,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     if (exercise.unilateral && _isLeftSide) {
       _isLeftSide = false;
-      _audioService.playSetComplete();
       _startSideSwitch();
       return;
     }
@@ -271,7 +265,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     _isLeftSide = true;
     if (_currentSetIndex < exercise.sets - 1) {
       _currentSetIndex++;
-      _audioService.playSetComplete();
       _startRestTimer();
     } else {
       _currentSetIndex = 0;
@@ -362,13 +355,17 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _runSideSwitchCountdown() {
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
       if (_prepSeconds > 1) {
         _prepSeconds--;
         notifyListeners();
       } else {
         t.cancel();
+        _initExerciseTimerValues();
         _phase = WorkoutPhase.exercise;
+        notifyListeners();
+        await _audioService.playExerciseStart();
+        if (_isDisposed || _phase != WorkoutPhase.exercise) return;
         _startExerciseTimer();
         notifyListeners();
       }
@@ -416,7 +413,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
       case ExerciseType.timed:
         _remainingSeconds = exercise.durationSeconds ?? 30;
         _startCountdown();
-        _startMetronome(exercise);
       case ExerciseType.reps:
         if ((exercise.reps ?? 0) <= 0) return;
         _currentRepIndex = 0;
@@ -435,7 +431,7 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       } else {
         t.cancel();
-        await _audioService.playTimerDone();
+        await _audioService.playSetComplete();
         if (_isDisposed) return;
         _onSetDone();
       }
@@ -445,41 +441,23 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _runRepTimer(Exercise exercise) {
     _cancelTimers();
     final intervalMs = (60000 / exercise.repBpm).round();
-    _audioService.playMetronomeAccent();
-    _repCueTimer = Timer.periodic(Duration(milliseconds: intervalMs), (t) {
+    final totalReps = exercise.reps ?? 0;
+    _repCueTimer = Timer.periodic(Duration(milliseconds: intervalMs), (t) async {
       _currentRepIndex++;
-      if (_currentRepIndex >= (currentExercise?.reps ?? 0)) {
+      notifyListeners();
+      if (_currentRepIndex >= totalReps) {
         t.cancel();
-        _countdownTimer = Timer(
-          const Duration(seconds: postLastRepDelaySeconds),
-          () async {
-            await _audioService.playTimerDone();
-            if (_isDisposed) return;
-            _onSetDone();
-            notifyListeners();
-          },
-        );
-      } else {
-        _audioService.playMetronomeAccent();
+        await _audioService.playSetComplete();
+        if (_isDisposed) return;
+        await Future.delayed(const Duration(seconds: 1));
+        if (_isDisposed) return;
+        _onSetDone();
         notifyListeners();
+      } else {
+        _audioService.playTick();
       }
     });
     notifyListeners();
-  }
-
-  void _startMetronome(Exercise exercise, {bool resume = false}) {
-    final min = exercise.metronomeBpmMin;
-    final max = exercise.metronomeBpmMax;
-    if (min == null || max == null) return;
-    if (!resume || _activeBpm == null) {
-      _activeBpm = min + _random.nextInt(max - min + 1);
-      notifyListeners();
-    }
-    final intervalMs = (60000 / _activeBpm!).round();
-    _audioService.playMetronomeTick();
-    _metronomeTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) {
-      if (!_isDisposed) _audioService.playMetronomeTick();
-    });
   }
 
   void _cancelTimers() {
@@ -487,8 +465,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     _countdownTimer = null;
     _repCueTimer?.cancel();
     _repCueTimer = null;
-    _metronomeTimer?.cancel();
-    _metronomeTimer = null;
   }
 
   // ── Utilities ──────────────────────────────────────────────────────────────
@@ -508,7 +484,6 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentStepIndex = 0;
     _currentCycleIndex = 0;
     _isLeftSide = true;
-    _activeBpm = null;
   }
 
   /// Estimates total workout duration in seconds.

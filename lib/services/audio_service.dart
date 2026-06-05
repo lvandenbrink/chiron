@@ -7,9 +7,7 @@ abstract class AudioService {
   const AudioService._();
 
   Future<void> playExerciseStart();
-  Future<void> playMetronomeAccent();
-  Future<void> playMetronomeTick();
-  Future<void> playTimerDone();
+  Future<void> playTick();
   Future<void> playSetComplete();
   void dispose();
 }
@@ -21,38 +19,20 @@ class _AudioServiceImpl extends AudioService {
 
   @override
   Future<void> playExerciseStart() async {
-    final wav1 = _generateWav(hz: 600, durationMs: 120, amplitude: 0.45);
-    await _playWav(wav1);
-    await Future.delayed(const Duration(milliseconds: 60));
-    final wav2 = _generateWav(hz: 900, durationMs: 320, amplitude: 0.55);
-    await _playWav(wav2);
-  }
-
-  @override
-  Future<void> playTimerDone() async {
-    final wav = _generateWav(hz: 880, durationMs: 600, amplitude: 0.5);
+    final wav = _generateWav(hz: 1000, durationMs: 350, amplitude: 0.55);
     await _playWav(wav);
   }
 
   @override
-  Future<void> playMetronomeAccent() async {
-    final wav = _generateWav(hz: 1500, durationMs: 60, amplitude: 0.45);
-    await _playWav(wav);
-  }
-
-  @override
-  Future<void> playMetronomeTick() async {
+  Future<void> playTick() async {
     final wav = _generateWav(hz: 750, durationMs: 45, amplitude: 0.3);
     await _playWav(wav);
   }
 
   @override
   Future<void> playSetComplete() async {
-    final wav1 = _generateWav(hz: 880, durationMs: 250, amplitude: 0.5);
-    await _playWav(wav1);
-    await Future.delayed(const Duration(milliseconds: 100));
-    final wav2 = _generateWav(hz: 1100, durationMs: 400, amplitude: 0.5);
-    await _playWav(wav2);
+    final wav = _generateWav(hz: 660, durationMs: 500, amplitude: 0.5);
+    await _playWav(wav);
   }
 
   Future<void> _playWav(Uint8List data) async {
