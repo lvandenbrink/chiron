@@ -1,7 +1,7 @@
+import 'package:chiron/main.dart';
+import 'package:chiron/providers/history_provider.dart';
+import 'package:chiron/providers/settings_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fysio_app/main.dart';
-import 'package:fysio_app/providers/history_provider.dart';
-import 'package:fysio_app/providers/settings_provider.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {

@@ -76,7 +76,7 @@ final Program _demo = Program(
           'Swing your arms naturally.',
       sets: 1,
       frequency: FrequencyType.daily,
-      type: ExerciseType.instruction,
+      type: ExerciseType.steps,
     ),
 
     // ── steps ─────────────────────────────────────────────────────────────────

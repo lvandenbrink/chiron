@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/exercise.dart';
+import '../providers/settings_provider.dart';
 import '../providers/workout_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/circular_timer.dart';
@@ -50,12 +51,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         if (provider.isResting) return _RestScreen(provider: provider);
         if (provider.isSwitchingSides) return _SideSwitchScreen(provider: provider);
         if (provider.isPreparing) {
+          final prepExercise = provider.currentExercise;
           return _PrepScreen(
             provider: provider,
             onExit: () => _confirmExit(context, provider),
             pressHeld: _pressHeld,
             onPointerDown: () => _onPointerDown(provider),
             onPointerUp: () => _onPointerUp(provider),
+            onSettings: prepExercise != null && _hasSettings(prepExercise)
+                ? () => _showExerciseSettings(context, provider, prepExercise)
+                : null,
           );
         }
 
@@ -73,6 +78,14 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               icon: const Icon(Icons.close),
               onPressed: () => _confirmExit(context, provider),
             ),
+            actions: [
+              if (_hasSettings(exercise))
+                IconButton(
+                  icon: const Icon(Icons.tune_rounded),
+                  onPressed: () =>
+                      _showExerciseSettings(context, provider, exercise),
+                ),
+            ],
           ),
           body: Column(
             children: [
@@ -110,11 +123,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                             ),
                             const SizedBox(height: 32),
                             switch (exercise.type) {
-                              ExerciseType.instruction =>
-                                _InstructionExerciseContent(
-                                    exercise: exercise, provider: provider),
                               ExerciseType.steps => _StepsExerciseContent(
                                   exercise: exercise, provider: provider),
+                              ExerciseType.metronome =>
+                                _MetronomeExerciseContent(
+                                    exercise: exercise,
+                                    provider: provider,
+                                    onOpenSettings: _hasSettings(exercise)
+                                        ? () => _showExerciseSettings(
+                                            context, provider, exercise)
+                                        : null),
                               _ => const SizedBox.shrink(),
                             },
                           ],
@@ -126,6 +144,25 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
         );
       },
+    );
+  }
+
+  bool _hasSettings(Exercise exercise) =>
+      exercise.type == ExerciseType.reps ||
+      exercise.type == ExerciseType.metronome ||
+      exercise.hasWeight;
+
+  void _showExerciseSettings(
+      BuildContext context, WorkoutProvider workout, Exercise exercise) {
+    final settings = context.read<SettingsProvider>();
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _ExerciseSettingsSheet(
+        exercise: exercise,
+        settings: settings,
+        workout: workout,
+      ),
     );
   }
 
@@ -163,6 +200,7 @@ class _PrepScreen extends StatelessWidget {
   final bool pressHeld;
   final VoidCallback? onPointerDown;
   final VoidCallback? onPointerUp;
+  final VoidCallback? onSettings;
 
   const _PrepScreen({
     required this.provider,
@@ -170,6 +208,7 @@ class _PrepScreen extends StatelessWidget {
     this.pressHeld = false,
     this.onPointerDown,
     this.onPointerUp,
+    this.onSettings,
   });
 
   @override
@@ -185,6 +224,13 @@ class _PrepScreen extends StatelessWidget {
           icon: const Icon(Icons.close),
           onPressed: onExit,
         ),
+        actions: [
+          if (onSettings != null)
+            IconButton(
+              icon: const Icon(Icons.tune_rounded),
+              onPressed: onSettings,
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -384,7 +430,7 @@ class _RestScreen extends StatelessWidget {
               pressHeld: false,
               mainContent: CircularTimer(
                 remainingSeconds: provider.remainingSeconds,
-                totalSeconds: WorkoutProvider.restDurationSeconds,
+                totalSeconds: provider.totalRestSeconds,
                 size: 220,
               ),
               hintText: hintText,
@@ -475,6 +521,10 @@ class _TimedRepsLayout extends StatelessWidget {
           ),
           if (exercise.description != null)
             _DescriptionCard(description: exercise.description!),
+          if (exercise.type == ExerciseType.timed && exercise.hasWeight) ...[
+            const SizedBox(height: 8),
+            _WeightChip(exercise: exercise),
+          ],
           const Spacer(),
         ],
       ),
@@ -533,7 +583,16 @@ class _TimedRepsLayout extends StatelessWidget {
       );
     }
     if (exercise.type == ExerciseType.reps) {
-      return _BpmBadge(bpm: exercise.repBpm);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BpmBadge(bpm: exercise.repBpm),
+          if (exercise.hasWeight) ...[
+            const SizedBox(width: 8),
+            _WeightChip(exercise: exercise),
+          ],
+        ],
+      );
     }
     return Text(
       pressHeld ? 'Laat los om verder te gaan' : 'Houd ingedrukt om te pauzeren',
@@ -547,11 +606,12 @@ class _TimedRepsLayout extends StatelessWidget {
 
 class _BpmBadge extends StatelessWidget {
   final int bpm;
-  const _BpmBadge({required this.bpm});
+  final VoidCallback? onTap;
+  const _BpmBadge({required this.bpm, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final badge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.08),
@@ -566,41 +626,63 @@ class _BpmBadge extends StatelessWidget {
         ],
       ),
     );
+    if (onTap == null) return badge;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: badge,
+    );
   }
 }
 
-// ── Instruction / steps exercise ─────────────────────────────────────────────
+// ── Metronome exercise ────────────────────────────────────────────────────────
 
-// ── Instruction exercise ──────────────────────────────────────────────────────
-
-class _InstructionExerciseContent extends StatelessWidget {
+class _MetronomeExerciseContent extends StatelessWidget {
   final Exercise exercise;
   final WorkoutProvider provider;
-  const _InstructionExerciseContent(
-      {required this.exercise, required this.provider});
+  final VoidCallback? onOpenSettings;
+  const _MetronomeExerciseContent(
+      {required this.exercise, required this.provider, this.onOpenSettings});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            exercise.description ?? exercise.name,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _BpmBadge(
+              bpm: exercise.repBpm,
+              onTap: onOpenSettings,
+            ),
+            if (exercise.hasWeight) ...[
+              const SizedBox(width: 8),
+              _WeightChip(exercise: exercise),
+            ],
+          ],
         ),
-        const SizedBox(height: 40),
+        if (exercise.description != null) ...[
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              exercise.description!,
+              textAlign: TextAlign.center,
+              style:
+                  Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
+            ),
+          ),
+        ],
+        const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: provider.completeInstruction,
+            onPressed: provider.completeMetronome,
             child: const Text('Klaar'),
           ),
         ),
@@ -620,7 +702,34 @@ class _StepsExerciseContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final steps = exercise.steps ?? [];
-    if (steps.isEmpty) return const SizedBox.shrink();
+    if (steps.isEmpty) {
+      return Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              exercise.description ?? exercise.name,
+              textAlign: TextAlign.center,
+              style:
+                  Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
+            ),
+          ),
+          const SizedBox(height: 40),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: provider.nextStep,
+              child: const Text('Klaar'),
+            ),
+          ),
+        ],
+      );
+    }
 
     final step = steps[provider.currentStepIndex];
     final totalCycles = exercise.cycleCount ?? 1;
@@ -835,6 +944,166 @@ class _DescriptionCard extends StatelessWidget {
   }
 }
 
+class _WeightChip extends StatelessWidget {
+  final Exercise exercise;
+  const _WeightChip({required this.exercise});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!exercise.hasWeight) return const SizedBox.shrink();
+    final settings = context.watch<SettingsProvider>();
+    final weight = settings.settingsFor(exercise.id).weight;
+    final label = weight % 1 == 0 ? '${weight.toInt()} kg' : '$weight kg';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.fitness_center, size: 17, color: AppColors.primary),
+          const SizedBox(width: 7),
+          Text(label, style: AppTextStyles.cueBadge),
+        ],
+      ),
+    );
+  }
+}
+
+// ── In-workout settings sheet ─────────────────────────────────────────────────
+
+class _ExerciseSettingsSheet extends StatefulWidget {
+  final Exercise exercise;
+  final SettingsProvider settings;
+  final WorkoutProvider workout;
+
+  const _ExerciseSettingsSheet({
+    required this.exercise,
+    required this.settings,
+    required this.workout,
+  });
+
+  @override
+  State<_ExerciseSettingsSheet> createState() => _ExerciseSettingsSheetState();
+}
+
+class _ExerciseSettingsSheetState extends State<_ExerciseSettingsSheet> {
+  late int _bpm;
+  late double _weight;
+
+  @override
+  void initState() {
+    super.initState();
+    _bpm = widget.settings.repBpmFor(widget.exercise);
+    _weight = widget.settings.settingsFor(widget.exercise.id).weight;
+  }
+
+  void _changeBpm(int delta) {
+    final newBpm = (_bpm + delta).clamp(1, 300);
+    if (newBpm == _bpm) return;
+    setState(() => _bpm = newBpm);
+    widget.settings.setRepBpm(widget.exercise.id, newBpm);
+    widget.workout.updateCurrentExerciseBpm(newBpm);
+  }
+
+  void _changeWeight(double delta) {
+    final newWeight = (_weight + delta).clamp(0.0, 500.0);
+    if (newWeight == _weight) return;
+    setState(() => _weight = newWeight);
+    final current = widget.settings.settingsFor(widget.exercise.id);
+    widget.settings.updateSettings(
+        widget.exercise.id, current.copyWith(weight: newWeight));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showBpm = widget.exercise.type == ExerciseType.reps ||
+        widget.exercise.type == ExerciseType.metronome;
+    final showWeight = widget.exercise.hasWeight;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          24, 8, 24, MediaQuery.of(context).padding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Instellingen', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 20),
+          if (showBpm) ...[
+            _SettingRow(
+              label: 'Tempo',
+              value: '$_bpm bpm',
+              onDecrement: () => _changeBpm(-1),
+              onIncrement: () => _changeBpm(1),
+            ),
+          ],
+          if (showBpm && showWeight) const SizedBox(height: 4),
+          if (showWeight) ...[
+            _SettingRow(
+              label: 'Gewicht',
+              value: _weight % 1 == 0
+                  ? '${_weight.toInt()} kg'
+                  : '$_weight kg',
+              onDecrement: () => _changeWeight(-0.5),
+              onIncrement: () => _changeWeight(0.5),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  const _SettingRow({
+    required this.label,
+    required this.value,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodyLarge),
+        ),
+        IconButton(
+          onPressed: onDecrement,
+          icon: const Icon(Icons.remove_rounded),
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+          ),
+        ),
+        SizedBox(
+          width: 80,
+          child: Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+          ),
+        ),
+        IconButton(
+          onPressed: onIncrement,
+          icon: const Icon(Icons.add_rounded),
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _BottomControls extends StatelessWidget {
   final WorkoutProvider provider;
   const _BottomControls({required this.provider});
@@ -844,7 +1113,8 @@ class _BottomControls extends StatelessWidget {
     final exercise = provider.currentExercise;
     final showPause = exercise != null &&
         (exercise.type == ExerciseType.timed ||
-            exercise.type == ExerciseType.reps) &&
+            exercise.type == ExerciseType.reps ||
+            exercise.type == ExerciseType.metronome) &&
         !provider.isPreparing;
 
     return Container(

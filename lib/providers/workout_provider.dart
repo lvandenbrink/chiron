@@ -27,6 +27,8 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _countdownTimer;
   Timer? _repCueTimer;
   bool _isDisposed = false;
+  bool _completingMetronome = false;
+  int _totalRestSeconds = restDurationSeconds;
 
   void Function(Exercise)? _onExerciseCompleted;
   void Function(List<Exercise>)? _onWorkoutCompleted;
@@ -62,6 +64,7 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get isRestAfterExercise => _phase == WorkoutPhase.rest && _currentSetIndex == 0;
   int get remainingSeconds => _remainingSeconds;
   int get prepSeconds => _prepSeconds;
+  int get totalRestSeconds => _totalRestSeconds;
 
   Exercise? get nextExercise =>
       _currentExerciseIndex + 1 < _exercises.length
@@ -154,6 +157,8 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
           } else {
             _runRepTimer(exercise);
           }
+        } else if (exercise?.type == ExerciseType.metronome) {
+          _startMetronomeTimer(exercise!);
         }
       default:
         break;
@@ -163,13 +168,29 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void togglePause() => _isRunning ? pauseTimer() : resumeTimer();
 
-  void completeInstruction() => _onSetDone();
+  Future<void> completeMetronome() async {
+    if (_phase != WorkoutPhase.exercise || currentExercise?.type != ExerciseType.metronome) return;
+    if (_completingMetronome) return;
+    _completingMetronome = true;
+    _cancelTimers();
+    await _audioService.playSetComplete();
+    _completingMetronome = false;
+    if (_isDisposed) return;
+    _onSetDone();
+    if (_isDisposed) return;
+    notifyListeners();
+  }
 
   void nextStep() {
     final exercise = currentExercise;
-    if (exercise == null || exercise.steps == null) return;
+    if (exercise == null) return;
+    final steps = exercise.steps;
+    if (steps == null || steps.isEmpty) {
+      _onSetDone();
+      return;
+    }
     final totalCycles = exercise.cycleCount ?? 1;
-    if (_currentStepIndex < exercise.steps!.length - 1) {
+    if (_currentStepIndex < steps.length - 1) {
       _currentStepIndex++;
     } else {
       _currentStepIndex = 0;
@@ -223,6 +244,23 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void resetOnExerciseCompleted() => _onExerciseCompleted = null;
 
+  void updateCurrentExerciseBpm(int bpm) {
+    if (_currentExerciseIndex >= _exercises.length) return;
+    _exercises[_currentExerciseIndex] =
+        _exercises[_currentExerciseIndex].copyWith(repBpm: bpm);
+    if (_phase == WorkoutPhase.exercise && _isRunning) {
+      final exercise = _exercises[_currentExerciseIndex];
+      if (exercise.type == ExerciseType.reps) {
+        if (_currentRepIndex < (exercise.reps ?? 0)) {
+          _runRepTimer(exercise);
+        }
+      } else if (exercise.type == ExerciseType.metronome) {
+        _startMetronomeTimer(exercise);
+      }
+    }
+    notifyListeners();
+  }
+
   // ── Workout flow ───────────────────────────────────────────────────────────
 
   void _beginWorkout() {
@@ -242,14 +280,7 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentCycleIndex = 0;
     _isLeftSide = true;
 
-    switch (exercise.type) {
-      case ExerciseType.timed:
-      case ExerciseType.reps:
-        _startPrep(afterRest: afterRest);
-      case ExerciseType.instruction:
-      case ExerciseType.steps:
-        _phase = WorkoutPhase.exercise;
-    }
+    _startPrep(afterRest: afterRest);
   }
 
   void _onSetDone() {
@@ -375,6 +406,7 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _startRestTimer({int duration = restDurationSeconds}) {
     _phase = WorkoutPhase.rest;
     _remainingSeconds = duration;
+    _totalRestSeconds = duration;
     _cancelTimers();
     _runRestCountdown();
     notifyListeners();
@@ -417,6 +449,8 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
         if ((exercise.reps ?? 0) <= 0) return;
         _currentRepIndex = 0;
         _runRepTimer(exercise);
+      case ExerciseType.metronome:
+        _startMetronomeTimer(exercise);
       default:
         break;
     }
@@ -460,6 +494,14 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void _startMetronomeTimer(Exercise exercise) {
+    _cancelTimers();
+    final intervalMs = (60000 / exercise.repBpm).round();
+    _repCueTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) {
+      _audioService.playTick();
+    });
+  }
+
   void _cancelTimers() {
     _countdownTimer?.cancel();
     _countdownTimer = null;
@@ -484,22 +526,21 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentStepIndex = 0;
     _currentCycleIndex = 0;
     _isLeftSide = true;
+    _completingMetronome = false;
+    _totalRestSeconds = restDurationSeconds;
   }
 
   /// Estimates total workout duration in seconds.
-  /// Timed/reps: actual duration + prep per set. Instruction/steps: 60 s per set.
-  /// All types include rest between sets.
+  /// All types include prep per set and rest between sets.
   static int estimatedDurationSeconds(List<Exercise> exercises) {
     int total = 0;
     for (final e in exercises) {
-      final bool hasPrepPhase =
-          e.type == ExerciseType.timed || e.type == ExerciseType.reps;
       final int exerciseDuration = switch (e.type) {
         ExerciseType.timed => e.durationSeconds ?? 30,
         ExerciseType.reps => ((e.reps ?? 0) * 60.0 / e.repBpm).round(),
         _ => 60,
       };
-      final int prepPerSet = hasPrepPhase ? prepDurationSeconds : 0;
+      const int prepPerSet = prepDurationSeconds;
       final int sideCount = e.unilateral ? 2 : 1;
       final int sideSwitchPerSet = e.unilateral ? switchSidesDurationSeconds : 0;
       total += e.sets * (prepPerSet + exerciseDuration * sideCount + sideSwitchPerSet);

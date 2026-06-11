@@ -1,4 +1,4 @@
-package com.fysio.fysio_app
+package com.fysio.chiron
 
 import io.flutter.embedding.android.FlutterActivity
 

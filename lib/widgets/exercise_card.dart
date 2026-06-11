@@ -89,10 +89,10 @@ class _TypeIcon extends StatelessWidget {
     final (icon, color) = switch (type) {
       ExerciseType.timed => (Icons.timer_outlined, AppColors.primary),
       ExerciseType.reps => (Icons.repeat, AppColors.primary),
-      ExerciseType.instruction =>
-        (Icons.info_outline, AppColors.textSecondary),
       ExerciseType.steps =>
         (Icons.view_carousel_outlined, AppColors.primary),
+      ExerciseType.metronome =>
+        (Icons.music_note_outlined, AppColors.primary),
     };
     return Container(
       width: 38,

@@ -1,6 +1,6 @@
 # Chiron
 
-A Flutter app for guided exercise programs. Named after Chiron, the healer of Greek mythology.
+A personal app for guided exercise programs. Named after Chiron, the healer of Greek mythology.
 
 ## What it does
 

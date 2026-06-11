@@ -1,6 +1,6 @@
 enum FrequencyType { daily, nTimesPerWeek }
 
-enum ExerciseType { timed, reps, instruction, steps }
+enum ExerciseType { timed, reps, steps, metronome }
 
 class ExerciseStep {
   final String label;

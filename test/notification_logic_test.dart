@@ -14,8 +14,8 @@
 //   timesPerDay          — how many sessions per day the user configured
 //   completionsToday     — sessions completed today, INCLUDING the current one
 
+import 'package:chiron/services/notification_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fysio_app/services/notification_service.dart';
 
 // Convenience wrapper so tests read like English.
 bool _shouldSuppress({
@@ -23,13 +23,12 @@ bool _shouldSuppress({
   bool hasExercisesToday = true,
   int timesPerDay = 1,
   int completionsToday = 1,
-}) =>
-    NotificationService.shouldSuppressNotificationToday(
-      notificationsEnabled: notificationsEnabled,
-      hasExercisesToday: hasExercisesToday,
-      timesPerDay: timesPerDay,
-      completionsToday: completionsToday,
-    );
+}) => NotificationService.shouldSuppressNotificationToday(
+  notificationsEnabled: notificationsEnabled,
+  hasExercisesToday: hasExercisesToday,
+  timesPerDay: timesPerDay,
+  completionsToday: completionsToday,
+);
 
 void main() {
   // ── Should notify (suppress = false) ───────────────────────────────────────
@@ -52,60 +51,45 @@ void main() {
     });
 
     test('exercise not done today (1×/day) — notification should fire', () {
-      expect(
-        _shouldSuppress(timesPerDay: 1, completionsToday: 0),
-        isFalse,
-      );
+      expect(_shouldSuppress(timesPerDay: 1, completionsToday: 0), isFalse);
     });
 
-    test('exercise done on other days but not today — notification should fire',
-        () {
-      // Same state as "not done today" from the function's perspective.
-      expect(
-        _shouldSuppress(timesPerDay: 1, completionsToday: 0),
-        isFalse,
-      );
-    });
+    test(
+      'exercise done on other days but not today — notification should fire',
+      () {
+        // Same state as "not done today" from the function's perspective.
+        expect(_shouldSuppress(timesPerDay: 1, completionsToday: 0), isFalse);
+      },
+    );
 
-    test('twice daily configured, done only once — notification should fire',
-        () {
-      expect(
-        _shouldSuppress(timesPerDay: 2, completionsToday: 1),
-        isFalse,
-      );
-    });
+    test(
+      'twice daily configured, done only once — notification should fire',
+      () {
+        expect(_shouldSuppress(timesPerDay: 2, completionsToday: 1), isFalse);
+      },
+    );
 
-    test('three times daily configured, done twice — notification should fire',
-        () {
-      expect(
-        _shouldSuppress(timesPerDay: 3, completionsToday: 2),
-        isFalse,
-      );
-    });
+    test(
+      'three times daily configured, done twice — notification should fire',
+      () {
+        expect(_shouldSuppress(timesPerDay: 3, completionsToday: 2), isFalse);
+      },
+    );
   });
 
   // ── Should not notify (suppress = true) ────────────────────────────────────
 
   group('notification suppressed — should reschedule from tomorrow', () {
     test('exercise done today (1×/day)', () {
-      expect(
-        _shouldSuppress(timesPerDay: 1, completionsToday: 1),
-        isTrue,
-      );
+      expect(_shouldSuppress(timesPerDay: 1, completionsToday: 1), isTrue);
     });
 
     test('twice daily configured, done twice', () {
-      expect(
-        _shouldSuppress(timesPerDay: 2, completionsToday: 2),
-        isTrue,
-      );
+      expect(_shouldSuppress(timesPerDay: 2, completionsToday: 2), isTrue);
     });
 
     test('three times daily configured, done all three', () {
-      expect(
-        _shouldSuppress(timesPerDay: 3, completionsToday: 3),
-        isTrue,
-      );
+      expect(_shouldSuppress(timesPerDay: 3, completionsToday: 3), isTrue);
     });
 
     test('nTimesPerWeek exercise — today is not a scheduled day', () {
@@ -118,42 +102,42 @@ void main() {
       );
     });
 
-    test('nTimesPerWeek exercise — not scheduled today — notifications enabled',
-        () {
-      expect(
-        _shouldSuppress(
-          notificationsEnabled: true,
-          hasExercisesToday: false,
-          timesPerDay: 1,
-          completionsToday: 0,
-        ),
-        isTrue,
-      );
-    });
+    test(
+      'nTimesPerWeek exercise — not scheduled today — notifications enabled',
+      () {
+        expect(
+          _shouldSuppress(
+            notificationsEnabled: true,
+            hasExercisesToday: false,
+            timesPerDay: 1,
+            completionsToday: 0,
+          ),
+          isTrue,
+        );
+      },
+    );
   });
 
   // ── Edge cases ─────────────────────────────────────────────────────────────
 
   group('edge cases', () {
     test('over-completed (done more than timesPerDay) → suppress', () {
-      expect(
-        _shouldSuppress(timesPerDay: 2, completionsToday: 3),
-        isTrue,
-      );
+      expect(_shouldSuppress(timesPerDay: 2, completionsToday: 3), isTrue);
     });
 
     test(
-        'notifications disabled + not a scheduled day → false (nothing to suppress)',
-        () {
-      expect(
-        _shouldSuppress(
-          notificationsEnabled: false,
-          hasExercisesToday: false,
-          completionsToday: 0,
-        ),
-        isFalse,
-      );
-    });
+      'notifications disabled + not a scheduled day → false (nothing to suppress)',
+      () {
+        expect(
+          _shouldSuppress(
+            notificationsEnabled: false,
+            hasExercisesToday: false,
+            completionsToday: 0,
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('mixed program (daily + nTimesPerWeek) on a non-nTimesPerWeek day', () {
       // Daily exercises exist → hasExercisesToday = true even if today is
