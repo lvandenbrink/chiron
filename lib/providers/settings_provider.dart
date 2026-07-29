@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/exercise.dart';
 import '../models/progression.dart';
 import '../services/notification_service.dart';
@@ -10,19 +12,21 @@ class SettingsProvider extends ChangeNotifier {
   static const _exSettingsKey = 'exercise_settings';
   static const _programDaysKey = 'program_days';
   static const _programOrderKey = 'program_order';
+  static const _exerciseOrderKey = 'exercise_order';
   static const _programTimesPerDayKey = 'program_times_per_day';
   static const _programPhaseKey = 'program_phase';
   static const _notificationEnabledKey = 'notification_enabled';
   static const _notificationTimeKey = 'notification_time';
   static const Set<int> _defaultDays = {1, 3, 5};
 
-  Map<String, Set<int>> _programDays = {};    // programId → scheduled days
-  Map<String, int> _programTimesPerDay = {};  // programId → 1 or 2
-  Map<String, int> _programPhase = {};        // programId → active phase (1-4)
+  Map<String, Set<int>> _programDays = {}; // programId → scheduled days
+  Map<String, int> _programTimesPerDay = {}; // programId → 1 or 2
+  Map<String, int> _programPhase = {}; // programId → active phase (1-4)
   Map<String, bool> _notificationEnabled = {};
   final Map<String, int> _notificationHour = {};
   final Map<String, int> _notificationMinute = {};
   List<String> _programOrder = [];
+  Map<String, List<String>> _exerciseOrder = {}; // programId → exercise id order
   Map<String, int> _repBpms = {};
   Map<String, ExerciseSettings> _exerciseSettings = {};
 
@@ -50,8 +54,7 @@ class SettingsProvider extends ChangeNotifier {
 
   // ── Times per day ────────────────────────────────────────────────────────
 
-  int timesPerDayFor(String programId) =>
-      _programTimesPerDay[programId] ?? 1;
+  int timesPerDayFor(String programId) => _programTimesPerDay[programId] ?? 1;
 
   Future<void> setTimesPerDay(String programId, int times) async {
     _programTimesPerDay[programId] = times;
@@ -74,6 +77,18 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setStringList(_programOrderKey, order);
   }
 
+  // ── Exercise order (per program) ──────────────────────────────────────────
+
+  List<String> exerciseOrderFor(String programId) =>
+      _exerciseOrder[programId] ?? [];
+
+  Future<void> setExerciseOrder(String programId, List<String> order) async {
+    _exerciseOrder[programId] = order;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_exerciseOrderKey, jsonEncode(_exerciseOrder));
+  }
+
   // ── Phase selection ───────────────────────────────────────────────────────
 
   int phaseFor(String programId) => _programPhase[programId] ?? 1;
@@ -91,12 +106,15 @@ class SettingsProvider extends ChangeNotifier {
       _notificationEnabled[programId] ?? false;
 
   TimeOfDay notificationTimeFor(String programId) => TimeOfDay(
-        hour: _notificationHour[programId] ?? 20,
-        minute: _notificationMinute[programId] ?? 0,
-      );
+    hour: _notificationHour[programId] ?? 20,
+    minute: _notificationMinute[programId] ?? 0,
+  );
 
   Future<void> setNotificationsEnabled(
-      String programId, bool enabled, String programName) async {
+    String programId,
+    bool enabled,
+    String programName,
+  ) async {
     _notificationEnabled[programId] = enabled;
     notifyListeners();
     await _saveNotifications();
@@ -114,7 +132,10 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setNotificationTime(
-      String programId, TimeOfDay time, String programName) async {
+    String programId,
+    TimeOfDay time,
+    String programName,
+  ) async {
     _notificationHour[programId] = time.hour;
     _notificationMinute[programId] = time.minute;
     notifyListeners();
@@ -132,10 +153,12 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> _saveNotifications() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-        _notificationEnabledKey, jsonEncode(_notificationEnabled));
+      _notificationEnabledKey,
+      jsonEncode(_notificationEnabled),
+    );
     final timeMap = {
       for (final k in _notificationHour.keys)
-        k: {'h': _notificationHour[k]!, 'm': _notificationMinute[k] ?? 0}
+        k: {'h': _notificationHour[k]!, 'm': _notificationMinute[k] ?? 0},
     };
     await prefs.setString(_notificationTimeKey, jsonEncode(timeMap));
   }
@@ -157,7 +180,9 @@ class SettingsProvider extends ChangeNotifier {
       _exerciseSettings[exerciseId] ?? const ExerciseSettings();
 
   Future<void> updateSettings(
-      String exerciseId, ExerciseSettings settings) async {
+    String exerciseId,
+    ExerciseSettings settings,
+  ) async {
     _exerciseSettings[exerciseId] = settings;
     notifyListeners();
     await _saveExerciseSettings();
@@ -165,8 +190,9 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> recordCompletion(String exerciseId, int defaultReps) async {
     final current = settingsFor(exerciseId);
-    var updated =
-        current.copyWith(completionCount: current.completionCount + 1);
+    var updated = current.copyWith(
+      completionCount: current.completionCount + 1,
+    );
     if (updated.shouldProgress(defaultReps)) {
       updated = updated.applyProgression(defaultReps);
     }
@@ -194,12 +220,21 @@ class SettingsProvider extends ChangeNotifier {
     final savedProgramDays = prefs.getString(_programDaysKey);
     if (savedProgramDays != null) {
       final map = jsonDecode(savedProgramDays) as Map<String, dynamic>;
-      _programDays = map.map((k, v) =>
-          MapEntry(k, (v as List).map((d) => d as int).toSet()));
+      _programDays = map.map(
+        (k, v) => MapEntry(k, (v as List).map((d) => d as int).toSet()),
+      );
     }
 
     final savedOrder = prefs.getStringList(_programOrderKey);
     if (savedOrder != null) _programOrder = savedOrder;
+
+    final savedExerciseOrder = prefs.getString(_exerciseOrderKey);
+    if (savedExerciseOrder != null) {
+      final map = jsonDecode(savedExerciseOrder) as Map<String, dynamic>;
+      _exerciseOrder = map.map(
+        (k, v) => MapEntry(k, (v as List).map((e) => e as String).toList()),
+      );
+    }
 
     final savedTimesPerDay = prefs.getString(_programTimesPerDayKey);
     if (savedTimesPerDay != null) {
@@ -238,10 +273,10 @@ class SettingsProvider extends ChangeNotifier {
     final savedSettings = prefs.getString(_exSettingsKey);
     if (savedSettings != null) {
       final map = jsonDecode(savedSettings) as Map<String, dynamic>;
-      _exerciseSettings = map.map((k, v) => MapEntry(
-            k,
-            ExerciseSettings.fromJson(v as Map<String, dynamic>),
-          ));
+      _exerciseSettings = map.map(
+        (k, v) =>
+            MapEntry(k, ExerciseSettings.fromJson(v as Map<String, dynamic>)),
+      );
     }
 
     notifyListeners();

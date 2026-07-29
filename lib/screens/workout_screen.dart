@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
 import '../models/exercise.dart';
 import '../providers/settings_provider.dart';
 import '../providers/workout_provider.dart';
@@ -49,7 +50,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       builder: (context, provider, _) {
         if (provider.isComplete) return const _CompleteScreen();
         if (provider.isResting) return _RestScreen(provider: provider);
-        if (provider.isSwitchingSides) return _SideSwitchScreen(provider: provider);
+        if (provider.isSwitchingSides)
+          return _SideSwitchScreen(provider: provider);
         if (provider.isPreparing) {
           final prepExercise = provider.currentExercise;
           return _PrepScreen(
@@ -67,11 +69,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         final exercise = provider.currentExercise;
         if (exercise == null) return const _CompleteScreen();
 
-        final supportsHold = exercise.type == ExerciseType.timed ||
+        final supportsHold =
+            exercise.type == ExerciseType.timed ||
             exercise.type == ExerciseType.reps;
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
+        return _WorkoutScaffold(
+          safeAreaBottom: false,
           appBar: AppBar(
             title: Text(exercise.name),
             leading: IconButton(
@@ -92,8 +95,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               LinearProgressIndicator(
                 value: provider.overallProgress,
                 backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.primary,
+                ),
                 minHeight: 4,
               ),
               Expanded(
@@ -124,15 +128,21 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                             const SizedBox(height: 32),
                             switch (exercise.type) {
                               ExerciseType.steps => _StepsExerciseContent(
-                                  exercise: exercise, provider: provider),
+                                exercise: exercise,
+                                provider: provider,
+                              ),
                               ExerciseType.metronome =>
                                 _MetronomeExerciseContent(
-                                    exercise: exercise,
-                                    provider: provider,
-                                    onOpenSettings: _hasSettings(exercise)
-                                        ? () => _showExerciseSettings(
-                                            context, provider, exercise)
-                                        : null),
+                                  exercise: exercise,
+                                  provider: provider,
+                                  onOpenSettings: _hasSettings(exercise)
+                                      ? () => _showExerciseSettings(
+                                          context,
+                                          provider,
+                                          exercise,
+                                        )
+                                      : null,
+                                ),
                               _ => const SizedBox.shrink(),
                             },
                           ],
@@ -153,7 +163,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       exercise.hasWeight;
 
   void _showExerciseSettings(
-      BuildContext context, WorkoutProvider workout, Exercise exercise) {
+    BuildContext context,
+    WorkoutProvider workout,
+    Exercise exercise,
+  ) {
     final settings = context.read<SettingsProvider>();
     showModalBottomSheet(
       context: context,
@@ -192,6 +205,36 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 }
 
+// ── Shared scaffold ───────────────────────────────────────────────────────────
+//
+// All workout sub-screens use this instead of raw Scaffold so SafeArea is
+// always applied in one place. top is skipped when an AppBar is present since
+// AppBar already insets its own content. Screens whose body manually absorbs
+// the bottom inset (colored bottom bars) pass safeAreaBottom: false.
+
+class _WorkoutScaffold extends StatelessWidget {
+  final PreferredSizeWidget? appBar;
+  final Widget body;
+  final Color backgroundColor;
+  final bool safeAreaBottom;
+
+  const _WorkoutScaffold({
+    this.appBar,
+    required this.body,
+    this.backgroundColor = AppColors.background,
+    this.safeAreaBottom = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      appBar: appBar,
+      body: SafeArea(top: appBar == null, bottom: safeAreaBottom, child: body),
+    );
+  }
+}
+
 // ── Preparation screen ───────────────────────────────────────────────────────
 
 class _PrepScreen extends StatelessWidget {
@@ -216,14 +259,11 @@ class _PrepScreen extends StatelessWidget {
     final exercise = provider.currentExercise;
     if (exercise == null) return const SizedBox.shrink();
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return _WorkoutScaffold(
+      safeAreaBottom: false,
       appBar: AppBar(
         title: Text(exercise.name),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: onExit,
-        ),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: onExit),
         actions: [
           if (onSettings != null)
             IconButton(
@@ -237,54 +277,63 @@ class _PrepScreen extends StatelessWidget {
           LinearProgressIndicator(
             value: provider.overallProgress,
             backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            valueColor:
-                const AlwaysStoppedAnimation<Color>(AppColors.primary),
+            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
             minHeight: 4,
           ),
           Expanded(
             child: Listener(
               behavior: HitTestBehavior.opaque,
-              onPointerDown: onPointerDown != null ? (_) => onPointerDown!() : null,
+              onPointerDown: onPointerDown != null
+                  ? (_) => onPointerDown!()
+                  : null,
               onPointerUp: onPointerUp != null ? (_) => onPointerUp!() : null,
-              onPointerCancel: onPointerUp != null ? (_) => onPointerUp!() : null,
+              onPointerCancel: onPointerUp != null
+                  ? (_) => onPointerUp!()
+                  : null,
               child: _TimedRepsLayout(
-              provider: provider,
-              exercise: exercise,
-              pressHeld: pressHeld,
-              hintText: pressHeld ? 'Laat los om verder te gaan' : 'Kom in positie',
-              mainContent: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 28,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '${provider.prepSeconds}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 80,
-                      fontWeight: FontWeight.w700,
-                      height: 1,
+                provider: provider,
+                exercise: exercise,
+                pressHeld: pressHeld,
+                hintText: pressHeld
+                    ? 'Laat los om verder te gaan'
+                    : 'Kom in positie',
+                mainContent: Container(
+                  width: 220,
+                  height: 220,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 28,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${provider.prepSeconds}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 80,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),          // _TimedRepsLayout
-            ),          // Listener
-          ),            // Expanded
+              ), // _TimedRepsLayout
+            ), // Listener
+          ), // Expanded
           Container(
             color: AppColors.surface,
             padding: EdgeInsets.fromLTRB(
-                16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+              16,
+              12,
+              16,
+              MediaQuery.of(context).padding.bottom + 12,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -297,8 +346,7 @@ class _PrepScreen extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () =>
-                        context.read<WorkoutProvider>().skipPrep(),
+                    onPressed: () => context.read<WorkoutProvider>().skipPrep(),
                     child: const Text('Begin nu'),
                   ),
                 ),
@@ -320,74 +368,70 @@ class _SideSwitchScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exercise = provider.currentExercise;
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Spacer(),
-              Text(
-                'Wissel van kant',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+    return _WorkoutScaffold(
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Spacer(),
+            Text(
+              'Wissel van kant',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
               ),
-              if (exercise != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  exercise.name,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(color: AppColors.textSecondary),
-                ),
-              ],
-              const SizedBox(height: 12),
-              const _SideBadge(side: 'Rechts'),
-              const Spacer(),
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 28,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '${provider.prepSeconds}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 60,
-                      fontWeight: FontWeight.w700,
-                      height: 1,
-                    ),
+            ),
+            if (exercise != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                exercise.name,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const _SideBadge(side: 'Rechts'),
+            const Spacer(),
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 28,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  '${provider.prepSeconds}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 60,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
                   ),
                 ),
               ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () =>
-                      context.read<WorkoutProvider>().skipSideSwitch(),
-                  child: const Text('Wissel nu'),
-                ),
+            ),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () =>
+                    context.read<WorkoutProvider>().skipSideSwitch(),
+                child: const Text('Wissel nu'),
               ),
-              const SizedBox(height: 24),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
@@ -409,8 +453,8 @@ class _RestScreen extends StatelessWidget {
         ? 'Volgende oefening begint automatisch'
         : 'Volgende set begint automatisch';
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return _WorkoutScaffold(
+      safeAreaBottom: false,
       appBar: AppBar(
         title: Text(exercise.name),
         automaticallyImplyLeading: false,
@@ -439,7 +483,11 @@ class _RestScreen extends StatelessWidget {
           Container(
             color: AppColors.surface,
             padding: EdgeInsets.fromLTRB(
-                16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+              16,
+              12,
+              16,
+              MediaQuery.of(context).padding.bottom + 12,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -480,7 +528,8 @@ class _TimedRepsLayout extends StatelessWidget {
   final Exercise exercise;
   final bool pressHeld;
   final Widget? mainContent; // overrides the auto-resolved circle for prep
-  final String? hintText; // shown below the circle (overrides auto-resolved hint)
+  final String?
+  hintText; // shown below the circle (overrides auto-resolved hint)
 
   const _TimedRepsLayout({
     required this.provider,
@@ -519,12 +568,12 @@ class _TimedRepsLayout extends StatelessWidget {
               ),
             ),
           ),
-          if (exercise.description != null)
-            _DescriptionCard(description: exercise.description!),
           if (exercise.type == ExerciseType.timed && exercise.hasWeight) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             _WeightChip(exercise: exercise),
           ],
+          if (exercise.description != null)
+            _DescriptionCard(description: exercise.description!),
           const Spacer(),
         ],
       ),
@@ -548,8 +597,10 @@ class _TimedRepsLayout extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.primary.withValues(alpha: 0.08),
-        border:
-            Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 3),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.3),
+          width: 3,
+        ),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -565,7 +616,10 @@ class _TimedRepsLayout extends StatelessWidget {
           ),
           Text(
             'van $total',
-            style: const TextStyle(fontSize: 17, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 17,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -576,10 +630,9 @@ class _TimedRepsLayout extends StatelessWidget {
     if (hintText != null) {
       return Text(
         hintText!,
-        style: Theme.of(context)
-            .textTheme
-            .bodySmall
-            ?.copyWith(color: AppColors.textSecondary),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
       );
     }
     if (exercise.type == ExerciseType.reps) {
@@ -595,11 +648,12 @@ class _TimedRepsLayout extends StatelessWidget {
       );
     }
     return Text(
-      pressHeld ? 'Laat los om verder te gaan' : 'Houd ingedrukt om te pauzeren',
-      style: Theme.of(context)
-          .textTheme
-          .bodySmall
-          ?.copyWith(color: AppColors.textSecondary),
+      pressHeld
+          ? 'Laat los om verder te gaan'
+          : 'Houd ingedrukt om te pauzeren',
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
     );
   }
 }
@@ -620,7 +674,11 @@ class _BpmBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.music_note_outlined, size: 17, color: AppColors.primary),
+          const Icon(
+            Icons.music_note_outlined,
+            size: 17,
+            color: AppColors.primary,
+          ),
           const SizedBox(width: 7),
           Text('$bpm bpm', style: AppTextStyles.cueBadge),
         ],
@@ -641,8 +699,11 @@ class _MetronomeExerciseContent extends StatelessWidget {
   final Exercise exercise;
   final WorkoutProvider provider;
   final VoidCallback? onOpenSettings;
-  const _MetronomeExerciseContent(
-      {required this.exercise, required this.provider, this.onOpenSettings});
+  const _MetronomeExerciseContent({
+    required this.exercise,
+    required this.provider,
+    this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -651,10 +712,7 @@ class _MetronomeExerciseContent extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _BpmBadge(
-              bpm: exercise.repBpm,
-              onTap: onOpenSettings,
-            ),
+            _BpmBadge(bpm: exercise.repBpm, onTap: onOpenSettings),
             if (exercise.hasWeight) ...[
               const SizedBox(width: 8),
               _WeightChip(exercise: exercise),
@@ -673,8 +731,9 @@ class _MetronomeExerciseContent extends StatelessWidget {
             child: Text(
               exercise.description!,
               textAlign: TextAlign.center,
-              style:
-                  Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(height: 1.6),
             ),
           ),
         ],
@@ -696,8 +755,7 @@ class _MetronomeExerciseContent extends StatelessWidget {
 class _StepsExerciseContent extends StatelessWidget {
   final Exercise exercise;
   final WorkoutProvider provider;
-  const _StepsExerciseContent(
-      {required this.exercise, required this.provider});
+  const _StepsExerciseContent({required this.exercise, required this.provider});
 
   @override
   Widget build(BuildContext context) {
@@ -715,8 +773,9 @@ class _StepsExerciseContent extends StatelessWidget {
             child: Text(
               exercise.description ?? exercise.name,
               textAlign: TextAlign.center,
-              style:
-                  Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(height: 1.6),
             ),
           ),
           const SizedBox(height: 40),
@@ -753,9 +812,9 @@ class _StepsExerciseContent extends StatelessWidget {
         Text(
           'Stap ${step.label}',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
+            color: AppColors.primary,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 16),
         Container(
@@ -768,8 +827,7 @@ class _StepsExerciseContent extends StatelessWidget {
           child: Text(
             step.instruction,
             textAlign: TextAlign.center,
-            style:
-                Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
           ),
         ),
         const SizedBox(height: 20),
@@ -796,11 +854,13 @@ class _StepsExerciseContent extends StatelessWidget {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: provider.nextStep,
-            child: Text(isLastStep && cycle >= totalCycles
-                ? 'Voltooien'
-                : isLastStep
-                    ? 'Volgende cyclus'
-                    : 'Volgende stap'),
+            child: Text(
+              isLastStep && cycle >= totalCycles
+                  ? 'Voltooien'
+                  : isLastStep
+                  ? 'Volgende cyclus'
+                  : 'Volgende stap',
+            ),
           ),
         ),
       ],
@@ -815,49 +875,54 @@ class _CompleteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return _WorkoutScaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.check_circle_outline,
-                  color: Colors.white, size: 88),
-              const SizedBox(height: 24),
-              const Text(
-                'Workout voltooid!',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle_outline,
+              color: Colors.white,
+              size: 88,
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Workout voltooid!',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Geweldig gedaan! Je hebt alle\noefeningen voltooid.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 17,
-                    height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Geweldig gedaan! Je hebt alle\noefeningen voltooid.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 17,
+                height: 1.5,
               ),
-              const SizedBox(height: 64),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 48, vertical: 16),
-                  textStyle: AppTextStyles.actionButton,
+            ),
+            const SizedBox(height: 64),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 48,
+                  vertical: 16,
                 ),
-                onPressed: () {
-                  context.read<WorkoutProvider>().resetWorkout();
-                  Navigator.of(context).popUntil((r) => r.isFirst);
-                },
-                child: const Text('Terug naar home'),
+                textStyle: AppTextStyles.actionButton,
               ),
-            ],
-          ),
+              onPressed: () {
+                context.read<WorkoutProvider>().resetWorkout();
+                Navigator.of(context).popUntil((r) => r.isFirst);
+              },
+              child: const Text('Terug naar home'),
+            ),
+          ],
         ),
       ),
     );
@@ -912,10 +977,7 @@ class _SideBadge extends StatelessWidget {
         color: AppColors.primary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-        side,
-        style: AppTextStyles.sideBadge,
-      ),
+      child: Text(side, style: AppTextStyles.sideBadge),
     );
   }
 }
@@ -935,10 +997,10 @@ class _DescriptionCard extends StatelessWidget {
       ),
       child: Text(
         description,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: AppColors.textSecondary, height: 1.6),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: AppColors.textSecondary,
+          height: 1.6,
+        ),
       ),
     );
   }
@@ -1014,18 +1076,25 @@ class _ExerciseSettingsSheetState extends State<_ExerciseSettingsSheet> {
     setState(() => _weight = newWeight);
     final current = widget.settings.settingsFor(widget.exercise.id);
     widget.settings.updateSettings(
-        widget.exercise.id, current.copyWith(weight: newWeight));
+      widget.exercise.id,
+      current.copyWith(weight: newWeight),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final showBpm = widget.exercise.type == ExerciseType.reps ||
+    final showBpm =
+        widget.exercise.type == ExerciseType.reps ||
         widget.exercise.type == ExerciseType.metronome;
     final showWeight = widget.exercise.hasWeight;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          24, 8, 24, MediaQuery.of(context).padding.bottom + 24),
+        24,
+        8,
+        24,
+        MediaQuery.of(context).padding.bottom + 24,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1044,9 +1113,7 @@ class _ExerciseSettingsSheetState extends State<_ExerciseSettingsSheet> {
           if (showWeight) ...[
             _SettingRow(
               label: 'Gewicht',
-              value: _weight % 1 == 0
-                  ? '${_weight.toInt()} kg'
-                  : '$_weight kg',
+              value: _weight % 1 == 0 ? '${_weight.toInt()} kg' : '$_weight kg',
               onDecrement: () => _changeWeight(-0.5),
               onIncrement: () => _changeWeight(0.5),
             ),
@@ -1111,7 +1178,8 @@ class _BottomControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exercise = provider.currentExercise;
-    final showPause = exercise != null &&
+    final showPause =
+        exercise != null &&
         (exercise.type == ExerciseType.timed ||
             exercise.type == ExerciseType.reps ||
             exercise.type == ExerciseType.metronome) &&
@@ -1120,7 +1188,11 @@ class _BottomControls extends StatelessWidget {
     return Container(
       color: AppColors.surface,
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
       child: Row(
         children: [
           Expanded(

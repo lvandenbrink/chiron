@@ -122,10 +122,13 @@ class WorkoutProvider extends ChangeNotifier with WidgetsBindingObserver {
     _beginWorkout();
   }
 
-  void startSingleExercise(Exercise exercise,
-      {void Function(Exercise)? onExerciseCompleted}) {
+  void startSingleExercise(
+    Exercise exercise, {
+    void Function(Exercise)? onExerciseCompleted,
+    void Function(List<Exercise>)? onWorkoutCompleted,
+  }) {
     _onExerciseCompleted = onExerciseCompleted;
-    _onWorkoutCompleted = null;
+    _onWorkoutCompleted = onWorkoutCompleted;
     _completedExercises.clear();
     _currentProgram = null;
     _exercises = [exercise];

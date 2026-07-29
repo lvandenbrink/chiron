@@ -33,20 +33,25 @@ class ProgramScreen extends StatelessWidget {
     final hasPhases = program.exercises.any((e) => e.phase != null);
     final selectedPhase = hasPhases ? settings.phaseFor(program.id) : null;
 
-    final dailyExercises = hasPhases
-        ? program.exercises
-            .where((e) =>
-                e.frequency == FrequencyType.daily &&
-                e.phase == selectedPhase)
-            .toList()
-        : program.dailyExercises;
-    final weekExercises = hasPhases
-        ? program.exercises
-            .where((e) =>
-                e.frequency == FrequencyType.nTimesPerWeek &&
-                e.phase == selectedPhase)
-            .toList()
-        : program.nTimesPerWeekExercises;
+    final exerciseOrder = settings.exerciseOrderFor(program.id);
+    final dailyExercises = _applyOrder(
+        hasPhases
+            ? program.exercises
+                .where((e) =>
+                    e.frequency == FrequencyType.daily &&
+                    e.phase == selectedPhase)
+                .toList()
+            : program.dailyExercises,
+        exerciseOrder);
+    final weekExercises = _applyOrder(
+        hasPhases
+            ? program.exercises
+                .where((e) =>
+                    e.frequency == FrequencyType.nTimesPerWeek &&
+                    e.phase == selectedPhase)
+                .toList()
+            : program.nTimesPerWeekExercises,
+        exerciseOrder);
 
     return Scaffold(
       appBar: AppBar(
@@ -113,7 +118,7 @@ class ProgramScreen extends StatelessWidget {
                     icon: Icons.today,
                     count: dailyExercises.length,
                   ),
-                  ...dailyExercises.map((e) => _card(context, e, settings)),
+                  _reorderableSection(context, dailyExercises, settings),
                 ],
                 if (weekExercises.isNotEmpty) ...[
                   _SectionHeader(
@@ -123,9 +128,10 @@ class ProgramScreen extends StatelessWidget {
                     count: weekExercises.length,
                     subtitle: isScheduledDay ? null : 'Niet vandaag',
                   ),
-                  ...weekExercises.map((e) => _card(context, e, settings,
-                        dimmed: !isScheduledDay)),
+                  _reorderableSection(context, weekExercises, settings,
+                      dimmed: !isScheduledDay),
                 ],
+                _EvolutionSection(program: program),
               ],
             ),
           ),
@@ -172,6 +178,69 @@ class ProgramScreen extends StatelessWidget {
     );
   }
 
+  /// Sorts [exercises] by [order] (a list of exercise ids). Exercises not
+  /// present in [order] keep their relative position and are appended after
+  /// the ones that are.
+  List<Exercise> _applyOrder(List<Exercise> exercises, List<String> order) {
+    if (order.isEmpty) return exercises;
+    final byId = {for (final e in exercises) e.id: e};
+    final result = <Exercise>[];
+    for (final id in order) {
+      final e = byId.remove(id);
+      if (e != null) result.add(e);
+    }
+    result.addAll(exercises.where((e) => byId.containsKey(e.id)));
+    return result;
+  }
+
+  Widget _reorderableSection(
+    BuildContext context,
+    List<Exercise> exercises,
+    SettingsProvider settings, {
+    bool dimmed = false,
+  }) {
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorderItem: (oldIndex, newIndex) =>
+          _reorderExercises(context, exercises, oldIndex, newIndex),
+      children: [
+        for (var i = 0; i < exercises.length; i++)
+          ReorderableDelayedDragStartListener(
+            key: ValueKey(exercises[i].id),
+            index: i,
+            child: _card(context, exercises[i], settings, dimmed: dimmed),
+          ),
+      ],
+    );
+  }
+
+  /// Persists the new order after a drag within one section, merging it back
+  /// into the program's full exercise order (defaulting to declaration order
+  /// for exercises that haven't been reordered yet).
+  void _reorderExercises(
+    BuildContext context,
+    List<Exercise> sectionExercises,
+    int oldIndex,
+    int newIndex,
+  ) {
+    final settings = context.read<SettingsProvider>();
+    final sectionIds = sectionExercises.map((e) => e.id).toList();
+    final reorderedSection = List<String>.from(sectionIds);
+    reorderedSection.insert(newIndex, reorderedSection.removeAt(oldIndex));
+
+    final fullOrder = settings.exerciseOrderFor(program.id).isNotEmpty
+        ? List<String>.from(settings.exerciseOrderFor(program.id))
+        : program.exercises.map((e) => e.id).toList();
+    final sectionIdSet = sectionIds.toSet();
+    final insertAt = fullOrder.indexWhere(sectionIdSet.contains);
+    fullOrder.removeWhere(sectionIdSet.contains);
+    fullOrder.insertAll(insertAt == -1 ? fullOrder.length : insertAt, reorderedSection);
+
+    settings.setExerciseOrder(program.id, fullOrder);
+  }
+
   Widget _card(
     BuildContext context,
     Exercise exercise,
@@ -205,44 +274,55 @@ class ProgramScreen extends StatelessWidget {
           (err) => debugPrint('recordCompletion failed: $err'),
         );
       },
-      onWorkoutCompleted: (completedExercises) {
-        final today = DateTime.now();
-        final completionsToday = history
-                .logsForDate(today)
-                .where((l) => l.programId == program.id)
-                .length +
-            1; // +1 for the workout that just finished
-        final todayScheduledDays = settings.scheduledDaysFor(program.id);
-        final hasExercisesToday = program.dailyExercises.isNotEmpty ||
-            (program.nTimesPerWeekExercises.isNotEmpty &&
-                todayScheduledDays.contains(today.weekday));
-        if (NotificationService.shouldSuppressNotificationToday(
-          notificationsEnabled: settings.notificationsEnabledFor(program.id),
-          hasExercisesToday: hasExercisesToday,
-          timesPerDay: settings.timesPerDayFor(program.id),
-          completionsToday: completionsToday,
-        )) {
-          NotificationService.instance.rescheduleFromTomorrow(
-            id: NotificationService.notifId(program.id),
-            title: program.name,
-            body: 'Je hebt vandaag nog niet geoefend.',
-            time: settings.notificationTimeFor(program.id),
-          );
-        }
-        history.addLog(WorkoutLog(
-          id: today.toIso8601String(),
-          date: today,
-          programId: program.id,
-          programName: program.name,
-          exercises: completedExercises.map((e) {
-            final es = settings.settingsFor(e.id);
-            return ExerciseLog.fromExercise(e, weight: es.weight);
-          }).toList(),
-        ));
-      },
+      onWorkoutCompleted: (completedExercises) =>
+          _handleWorkoutCompleted(settings, history, completedExercises),
     );
     Navigator.push(
         context, MaterialPageRoute(builder: (_) => const WorkoutScreen()));
+  }
+
+  /// Records the completed exercises to history and, if that means today's
+  /// target for this program is met, suppresses today's reminder notification.
+  /// Shared by full-program workouts and single-exercise sessions so that
+  /// practicing just one exercise still counts toward "done today".
+  void _handleWorkoutCompleted(
+    SettingsProvider settings,
+    HistoryProvider history,
+    List<Exercise> completedExercises,
+  ) {
+    final today = DateTime.now();
+    final completionsToday = history
+            .logsForDate(today)
+            .where((l) => l.programId == program.id)
+            .length +
+        1; // +1 for the workout that just finished
+    final todayScheduledDays = settings.scheduledDaysFor(program.id);
+    final hasExercisesToday = program.dailyExercises.isNotEmpty ||
+        (program.nTimesPerWeekExercises.isNotEmpty &&
+            todayScheduledDays.contains(today.weekday));
+    if (NotificationService.shouldSuppressNotificationToday(
+      notificationsEnabled: settings.notificationsEnabledFor(program.id),
+      hasExercisesToday: hasExercisesToday,
+      timesPerDay: settings.timesPerDayFor(program.id),
+      completionsToday: completionsToday,
+    )) {
+      NotificationService.instance.rescheduleFromTomorrow(
+        id: NotificationService.notifId(program.id),
+        title: program.name,
+        body: 'Je hebt vandaag nog niet geoefend.',
+        time: settings.notificationTimeFor(program.id),
+      );
+    }
+    history.addLog(WorkoutLog(
+      id: today.toIso8601String(),
+      date: today,
+      programId: program.id,
+      programName: program.name,
+      exercises: completedExercises.map((e) {
+        final es = settings.settingsFor(e.id);
+        return ExerciseLog.fromExercise(e, weight: es.weight);
+      }).toList(),
+    ));
   }
 
   void _showSchedulePicker(BuildContext context) {
@@ -260,6 +340,7 @@ class ProgramScreen extends StatelessWidget {
 
   void _startSingle(BuildContext context, Exercise exercise) {
     final settings = context.read<SettingsProvider>();
+    final history = context.read<HistoryProvider>();
     context.read<WorkoutProvider>().startSingleExercise(
       settings.withExerciseSettings(exercise),
       onExerciseCompleted: (e) {
@@ -267,6 +348,8 @@ class ProgramScreen extends StatelessWidget {
           (err) => debugPrint('recordCompletion failed: $err'),
         );
       },
+      onWorkoutCompleted: (completedExercises) =>
+          _handleWorkoutCompleted(settings, history, completedExercises),
     );
     Navigator.push(
         context, MaterialPageRoute(builder: (_) => const WorkoutScreen()));
@@ -648,6 +731,177 @@ class _SectionHeader extends StatelessWidget {
                     fontWeight: FontWeight.w500)),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ── Evolution (exercise history over time) ────────────────────────────────────
+
+/// The ISO-8601 (year, week number) for [date].
+(int, int) _isoWeek(DateTime date) {
+  final d = DateTime.utc(date.year, date.month, date.day);
+  final thursday = d.add(Duration(days: 4 - d.weekday));
+  final firstDayOfYear = DateTime.utc(thursday.year, 1, 1);
+  final week = (thursday.difference(firstDayOfYear).inDays / 7).floor() + 1;
+  return (thursday.year, week);
+}
+
+class _WeekEntry {
+  final int isoYear;
+  final int isoWeek;
+  final Map<String, String> exerciseNamesById = {};
+  List<String> orderedIds = [];
+
+  _WeekEntry({required this.isoYear, required this.isoWeek});
+}
+
+/// Groups a program's completed workouts by ISO week, showing which
+/// exercises were actually performed each week and highlighting the ones
+/// that are new since the previous logged week.
+class _EvolutionSection extends StatelessWidget {
+  final Program program;
+
+  const _EvolutionSection({required this.program});
+
+  @override
+  Widget build(BuildContext context) {
+    final history = context.watch<HistoryProvider>();
+    final logs = history.logsForProgram(program.id);
+    final weeks = _groupByWeek(logs);
+    if (weeks.length < 2) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          label: 'Verloop',
+          color: program.color,
+          icon: Icons.timeline_rounded,
+          count: weeks.length,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < weeks.length; i++)
+                _WeekRow(
+                  week: weeks[i],
+                  previous: i > 0 ? weeks[i - 1] : null,
+                  color: program.color,
+                  isLast: i == weeks.length - 1,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<_WeekEntry> _groupByWeek(List<WorkoutLog> logs) {
+    final exerciseOrder = {
+      for (var i = 0; i < program.exercises.length; i++)
+        program.exercises[i].id: i,
+    };
+    final byWeek = <(int, int), _WeekEntry>{};
+    for (final log in logs) {
+      final key = _isoWeek(log.date);
+      final entry = byWeek.putIfAbsent(
+          key, () => _WeekEntry(isoYear: key.$1, isoWeek: key.$2));
+      for (final e in log.exercises) {
+        entry.exerciseNamesById[e.exerciseId] = e.name;
+      }
+    }
+    final weeks = byWeek.values.toList()
+      ..sort((a, b) => a.isoYear != b.isoYear
+          ? a.isoYear.compareTo(b.isoYear)
+          : a.isoWeek.compareTo(b.isoWeek));
+    for (final week in weeks) {
+      week.orderedIds = week.exerciseNamesById.keys.toList()
+        ..sort((a, b) =>
+            (exerciseOrder[a] ?? 999).compareTo(exerciseOrder[b] ?? 999));
+    }
+    return weeks;
+  }
+}
+
+class _WeekRow extends StatelessWidget {
+  final _WeekEntry week;
+  final _WeekEntry? previous;
+  final Color color;
+  final bool isLast;
+
+  const _WeekRow({
+    required this.week,
+    required this.previous,
+    required this.color,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final previousIds = previous?.exerciseNamesById.keys.toSet() ?? {};
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 4 : 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Week ${week.isoWeek} · ${week.isoYear}',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final id in week.orderedIds)
+                _ExerciseChip(
+                  label: week.exerciseNamesById[id]!,
+                  isNew: previous != null && !previousIds.contains(id),
+                  color: color,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExerciseChip extends StatelessWidget {
+  final String label;
+  final bool isNew;
+  final Color color;
+
+  const _ExerciseChip({
+    required this.label,
+    required this.isNew,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isNew ? color.withValues(alpha: 0.15) : AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isNew ? color.withValues(alpha: 0.5) : Colors.grey.shade300,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isNew ? FontWeight.w700 : FontWeight.w500,
+          color: isNew ? color : AppColors.textPrimary,
+        ),
       ),
     );
   }

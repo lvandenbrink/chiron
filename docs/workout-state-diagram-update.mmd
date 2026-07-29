@@ -1,0 +1,21 @@
+stateDiagram-v2
+    state exercise_done <<choice>>
+
+    [*] --> idle
+
+    idle --> preparing : startWorkout() / startSingleExercise()
+
+    preparing --> exercise : endCountdown() / skipCountdown()
+    note left of preparing : startCountdown()
+
+    exercise --> exercise_done : setDone() / endCountdown() / instructionDone() / nextExercise()
+    note left of exercise : playExerciseStart() + startExerciseTimer() + playMetronome() 
+
+    exercise_done --> rest : more sets remain
+    exercise_done --> complete : last exercise done
+    note left of exercise_done : playExerciseComplete() + stopExerciseTimer() + stopMetronome()
+    
+    rest --> preparing : endCountdown() / skipCountdown()
+    note left of rest : startRestTimer()
+
+    complete --> [*]

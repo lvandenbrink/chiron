@@ -131,7 +131,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
             16, 16, 16, MediaQuery.of(context).padding.bottom + 32),
         child: Column(
@@ -201,6 +203,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   )),
           ],
+        ),
         ),
       ),
     );

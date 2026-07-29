@@ -77,7 +77,9 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ReorderableListView(
+      body: SafeArea(
+        bottom: false,
+        child: ReorderableListView(
         buildDefaultDragHandles: false,
         padding: EdgeInsets.fromLTRB(
           16, 16, 16, MediaQuery.of(context).padding.bottom + 16,
@@ -96,6 +98,7 @@ class HomeScreen extends StatelessWidget {
               child: _ProgramCard(program: ordered[i]),
             ),
         ],
+        ),
       ),
     );
   }

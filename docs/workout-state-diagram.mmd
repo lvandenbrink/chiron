@@ -1,0 +1,25 @@
+stateDiagram-v2
+    [*] --> idle
+
+    idle --> preparing : startWorkout() / startSingleExercise()
+
+    preparing --> exercise : countdown ends → playExerciseStart()\nskipPrep()
+
+    exercise --> switchingSides : unilateral left side done
+    exercise --> rest : set done, more sets remain\nexercise done + restAfterExercise
+    exercise --> preparing : exercise done, no restAfterExercise\n→ next exercise
+    exercise --> complete : last exercise done
+
+    switchingSides --> exercise : countdown ends → playExerciseStart()\nskipSideSwitch()
+
+    rest --> preparing : countdown ends\nskipRest()
+
+    complete --> idle : resetWorkout()
+    complete --> [*]
+
+    note right of preparing
+        isRunning=false pauses
+        any timed state;
+        resume restarts
+        the active timer
+    end note

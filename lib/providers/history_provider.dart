@@ -19,6 +19,11 @@ class HistoryProvider extends ChangeNotifier {
       .where((l) => l.date.year == year && l.date.month == month)
       .toList();
 
+  List<WorkoutLog> logsForProgram(String programId) => _logs
+      .where((l) => l.programId == programId)
+      .toList()
+    ..sort((a, b) => a.date.compareTo(b.date));
+
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
