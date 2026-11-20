@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.fysio.chiron"
+    namespace = "com.brink.it.chiron"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.fysio.chiron"
+        applicationId = "com.brink.it.chiron"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
