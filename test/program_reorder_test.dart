@@ -1,4 +1,3 @@
-import 'package:chiron/data/programs_example.dart' as example;
 import 'package:chiron/providers/history_provider.dart';
 import 'package:chiron/providers/settings_provider.dart';
 import 'package:chiron/screens/program_screen.dart';
@@ -7,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'helpers/programs.dart';
 
 Future<void> _longPressDrag(
   WidgetTester tester,
@@ -29,7 +30,7 @@ void main() {
       'long-pressing and dragging an exercise reorders it within its '
       'section and persists the new order', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final program = example.programs.firstWhere((p) => p.id == 'demo');
+    final program = exampleCatalog.byId('demo')!;
     final settings = SettingsProvider();
 
     await tester.pumpWidget(

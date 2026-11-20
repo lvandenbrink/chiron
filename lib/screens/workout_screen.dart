@@ -50,8 +50,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       builder: (context, provider, _) {
         if (provider.isComplete) return const _CompleteScreen();
         if (provider.isResting) return _RestScreen(provider: provider);
-        if (provider.isSwitchingSides)
+        if (provider.isSwitchingSides) {
           return _SideSwitchScreen(provider: provider);
+        }
         if (provider.isPreparing) {
           final prepExercise = provider.currentExercise;
           return _PrepScreen(

@@ -1,0 +1,54 @@
+# Phases group exercises into selectable blocks. The program screen shows a
+# selector with each phase label; only the selected phase's exercises are shown
+# and included in the workout. Phases are numbered in the order listed.
+# Exercises under a top-level `exercises:` key are shown in every phase.
+
+id: demo_phases
+name: Fase programma
+description: Progressive 8-week plan with four selectable phases
+color: "#5C6BC0"
+emoji: "🌱"
+frequency: daily
+
+phases:
+  - label: Wk 1–2
+    exercises:
+      - id: ph1_stretch
+        name: Full-body stretch
+        type: timed
+        durationSeconds: 60
+        description: Gentle mobilisation to start the program.
+
+  - label: Wk 3–4
+    exercises:
+      - id: ph2_hinge
+        name: Hip hinge
+        type: reps
+        sets: 2
+        reps: 10
+        repBpm: 15
+        description: Bodyweight hinge focusing on posterior chain activation.
+
+  - label: Wk 5–6
+    exercises:
+      - id: ph3_rdl
+        name: Single leg RDL
+        type: reps
+        sets: 2
+        reps: 8
+        repBpm: 15
+        hasWeight: true
+        unilateral: true
+        description: Add a light dumbbell once the movement feels controlled.
+
+  - label: Wk 7–8
+    exercises:
+      - id: ph4_press
+        name: Overhead press
+        type: reps
+        frequency: nTimesPerWeek
+        sets: 3
+        reps: 10
+        repBpm: 15
+        hasWeight: true
+        description: Press dumbbells from shoulder height to full extension.

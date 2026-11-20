@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../data/programs_data.dart';
+import '../data/program_catalog.dart';
 import '../models/exercise.dart';
 import '../models/program.dart';
 import '../providers/settings_provider.dart';
@@ -19,7 +19,7 @@ String _formatDuration(int seconds) {
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  List<Program> _orderedPrograms(List<String> order) {
+  List<Program> _orderedPrograms(List<Program> programs, List<String> order) {
     if (order.isEmpty) return programs;
     final map = {for (final p in programs) p.id: p};
     final result = order.map((id) => map[id]).whereType<Program>().toList();
@@ -32,7 +32,8 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final ordered = _orderedPrograms(settings.programOrder);
+    final ordered = _orderedPrograms(
+        context.read<ProgramCatalog>().programs, settings.programOrder);
 
     return Scaffold(
       appBar: AppBar(

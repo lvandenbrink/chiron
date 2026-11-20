@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../data/programs_data.dart';
+import '../data/program_catalog.dart';
 import '../models/program.dart';
 import '../models/workout_log.dart';
 import '../providers/history_provider.dart';
@@ -103,13 +103,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _formatTime(DateTime d) =>
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
-  Program? _findProgram(String programId) {
-    try {
-      return programs.firstWhere((p) => p.id == programId);
-    } catch (_) {
-      return null;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -198,7 +191,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     onDismissed: (_) => history.removeLog(log.id),
                     child: _WorkoutCard(
                       log: log,
-                      program: _findProgram(log.programId),
+                      program: context.read<ProgramCatalog>().byId(log.programId),
                       formatTime: _formatTime,
                     ),
                   )),

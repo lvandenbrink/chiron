@@ -1,0 +1,92 @@
+# Example program — documents every supported field and exercise type.
+#
+# One program per file. Files load in alphabetical order (hence the 01_ prefix);
+# users can reorder programs in the app.
+#
+# Program fields:
+#   id           unique across all programs
+#   name, description, emoji
+#   color        "#RRGGBB"
+#   frequency    default for exercises: daily | nTimesPerWeek
+#   exercises    list of exercises (shown in every phase)
+#   phases       optional list of { label, exercises }; see 02_demo_phases.yaml
+#
+# Exercise fields (only id, name and type are always required):
+#   id                        unique across all exercises; settings and history
+#                             are stored by id, so don't change it afterwards
+#   name, description
+#   type                      timed | reps | steps | metronome
+#   frequency                 overrides the program default
+#   sets                      default 1
+#   reps                      required for type reps
+#   durationSeconds           required for type timed
+#   repBpm                    rep cue beats per minute, default 20
+#   steps                     list of { label, instruction } for type steps
+#   cycleCount                repeats the steps sequence N times
+#   hasWeight                 enables weight tracking and progressive overload
+#   unilateral                runs left side, then right side
+#   prepDurationSeconds       overrides the prep countdown before each set
+#   restAfterExerciseSeconds  rest before the next exercise (default: none)
+#
+# Text tips: `>-` folds lines into one paragraph, `|-` keeps line breaks.
+
+id: demo
+name: Demo programma
+description: Shows every exercise type and feature
+color: "#00897B"
+emoji: "💪"
+frequency: daily
+
+exercises:
+  - id: demo_balance
+    name: Balance hold
+    type: timed
+    sets: 3
+    durationSeconds: 30
+    unilateral: true
+    description: Stand on one leg. Keep the hip level and gaze forward.
+
+  - id: demo_squat
+    name: Squat
+    type: reps
+    frequency: nTimesPerWeek
+    sets: 3
+    reps: 12
+    repBpm: 15
+    hasWeight: true
+    description: >-
+      Feet shoulder-width. Lower until thighs are parallel. Keep knees in line with
+      feet.
+
+  - id: demo_rdl
+    name: Single leg RDL
+    type: reps
+    frequency: nTimesPerWeek
+    sets: 2
+    reps: 10
+    repBpm: 15
+    hasWeight: true
+    unilateral: true
+    description: Hinge forward on one leg. Keep the back straight.
+
+  - id: demo_warmup
+    name: Warm-up
+    type: steps
+    description: >-
+      March on the spot for 2 minutes, gradually picking up pace. Swing your arms
+      naturally.
+
+  - id: demo_breathing
+    name: Breathing drill
+    type: steps
+    cycleCount: 3
+    description: Two-phase nasal breathing. Repeat 3 times.
+    steps:
+      - label: Inhale
+        instruction: >-
+          Breathe in slowly for 4 counts through the nose. Feel the belly expand first,
+          then the chest.
+      - label: Exhale
+        instruction: >-
+          Breathe out for 6 counts through pursed lips. Let the chest fall, then gently
+          draw the belly in.
